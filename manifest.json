@@ -1,0 +1,9 @@
+{
+  "name": "Color System Utilities",
+  "id": "1054178995717840798",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "editorType": [
+    "figma"
+  ]
+}
