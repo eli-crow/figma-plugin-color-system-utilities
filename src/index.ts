@@ -21,20 +21,18 @@ function getScaleReferenceComponent(): ComponentNode {
 }
 
 function getScaleInstances(page: PageNode, selected: boolean = false): InstanceNode[] {
-    const isInstance = n =>
-        n.type === "INSTANCE" &&
-        n.visible &&
-        n.mainComponent.name === SCALE_REFERENCE_COMPONENT_NAME
+    const isInstance = node =>
+        node.type === "INSTANCE" &&
+        node.visible &&
+        node.mainComponent.name === SCALE_REFERENCE_COMPONENT_NAME &&
+        node.name.startsWith("$")
+
     const instances = selected
         ? page.selection.filter(isInstance) as InstanceNode[]
         : page.findAll(isInstance) as InstanceNode[]
 
     if (instances.length === 0) {
-        throw new Error(`Please select one or more instances of "${SCALE_REFERENCE_COMPONENT_NAME}" component at the root level.`)
-    }
-
-    if (instances.some(n => !n.name.startsWith("$"))) {
-        throw new Error('Each selected scale should have a layer name like "$hue" where "hue" is the name of the color scale (e.g. green-500)')
+        throw new Error(`Please select one or more instances of "${SCALE_REFERENCE_COMPONENT_NAME}" component at the root level with a layer name like "$hue"`)
     }
 
     return instances
@@ -96,17 +94,19 @@ function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, p
     const style = figma.getLocalPaintStyles().find(s => s.name.replaceAll(/\s+/g, '') === styleName) ?? figma.createPaintStyle()
     style.name = styleName
     style.paints = [paint]
-    // TODO: calculate contrast against the background color? Other useful info and put in description?
+    // style.description
+    // maybe: calculate contrast against the background color? Other useful info and put in description?
 }
 
-function generateStylesFromScale(scale: Scale) {
+function regenerateStylesFromScale(scale: Scale) {
     scale.variants.forEach(({ name, paint }) => {
-        if (['black', 'white'].includes(name)) {
+        if (name === 'white' || name === 'black') {
             // HACK: this should be handled upstream, but it's not working properly
             return
         }
         createOrUpdateScaleStyle(scale.theme, scale.hue, name, paint)
     })
+    // TODO: delete all styles in theme/hue/ that aren't in scale.variants
 }
 
 function applyExistingStylesToScaleInstances(theme: string, hue: string) {
@@ -145,11 +145,32 @@ const commands = {
         const instances = getScaleInstances(page, true)
         const scales = instances.map(instance => toScale(instance, page))
         scales.forEach(scale => {
-            generateStylesFromScale(scale)
+            regenerateStylesFromScale(scale)
             applyExistingStylesToScaleInstances(scale.theme, scale.hue)
         })
     },
-    //TODO: generateScaleFromDefault
+
+    //TODO: regenerateScale
+    // generate a scale based on the default variant of the selected instance.
+    // stretch: automate red / yellow shift for yellowish hues
+
+    //TODO: blendScale
+    // for a selection of fillable nodes with numeric names in the range (0, 1000), where all elements share a parent
+    // use catmullRom interpolation to generate blended colors for unselected variants in HCL space
+    // the hues of black and white should be interpreted from the nearest selected variant
+
+    //TODO: regenerateAllScales
+    // For each page starting with $
+    // delete any tokens starting with the page’s name excluding “$”
+    // For each instance of $ScaleReference on that page,
+    // generateScaleFromDefault()
+
+    //TODO: snapColor
+    // find the right theme by finding the page with the background color most similar to the current page
+    // for evey paint style with exactly one SolidPaint among the selection
+    // find the most similar color among numeric variants in the right theme and apply the paint style
+    // stretch: for every GradientStop in every GradientPaint, apply the fill color to the gradient stop.
+    // stretch: for every
 }
 
 function main() {
