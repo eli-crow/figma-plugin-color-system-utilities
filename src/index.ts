@@ -110,6 +110,11 @@ function updateStyles(scale: Scale) {
 }
 
 function updateInstances(theme: string, hue: string) {
+    // TODO: apply color to against default reference
+    // TODO: find any non-gray styles inside sample and apply corresponding color
+    // TODO: show appropriate saturation indicator and value
+    // TODO: update tilte to reflect implied name
+
     const page = figma.root.children.find(p => p.name === `\$${theme}`)
     if (!page) {
         throw new Error(`Expected a page named "\$${theme}"`)
@@ -164,6 +169,7 @@ const commands = {
     // delete any tokens starting with the page’s name excluding “$”
     // For each instance of $ScaleReference on that page,
     // generateScaleFromDefault()
+    // blocker: how do you determine whether the theme is lightish or darkish? What is the threshold?
 
     //TODO: snapColor
     // find the right theme by finding the page with the background color most similar to the current page
@@ -171,6 +177,12 @@ const commands = {
     // find the most similar color among numeric variants in the right theme and apply the paint style
     // stretch: for every GradientStop in every GradientPaint, apply the fill color to the gradient stop.
     // stretch: for every
+
+    //TODO: changeTheme <theme>
+    // use parameters, find the right color based on name. same hue, different theme
+
+    //TODO: changeHue
+    // use parameters, find the right color based on name. same theme, different hue
 }
 
 function main() {
