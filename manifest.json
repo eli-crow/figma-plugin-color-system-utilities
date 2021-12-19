@@ -9,7 +9,7 @@
   "menu": [
     {
       "name": "Generate Scale Fill Styles",
-      "command": "generateStylesFromSelectedScales"
+      "command": "generateStyles"
     }
   ]
 }

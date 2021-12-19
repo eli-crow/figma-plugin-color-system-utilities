@@ -140,7 +140,7 @@ function applyExistingStylesToScaleInstances(theme: string, hue: string) {
 }
 
 const commands = {
-    generateStylesFromSelectedScales() {
+    generateStyles() {
         const page = figma.currentPage
         const instances = getScaleInstances(page, true)
         const scales = instances.map(instance => toScale(instance, page))
