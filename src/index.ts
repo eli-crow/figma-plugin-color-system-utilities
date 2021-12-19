@@ -20,7 +20,7 @@ function getScaleReferenceComponent(): ComponentNode {
     return referenceComponents[0]
 }
 
-function getScaleInstances(page: PageNode, selected: boolean = false): InstanceNode[] {
+function getInstances(page: PageNode, selected: boolean = false): InstanceNode[] {
     const isInstance = node =>
         node.type === "INSTANCE" &&
         node.visible &&
@@ -89,7 +89,7 @@ function toScale(instance: InstanceNode, page: PageNode): Scale {
     return { theme, hue, variants }
 }
 
-function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
+function createOrUpdateStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
     const styleName = `${theme}/${hue}/${variant}`
     const style = figma.getLocalPaintStyles().find(s => s.name.replaceAll(/\s+/g, '') === styleName) ?? figma.createPaintStyle()
     style.name = styleName
@@ -98,25 +98,25 @@ function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, p
     // maybe: calculate contrast against the background color? Other useful info and put in description?
 }
 
-function regenerateStylesFromScale(scale: Scale) {
+function updateStyles(scale: Scale) {
     scale.variants.forEach(({ name, paint }) => {
         if (name === 'white' || name === 'black') {
             // HACK: this should be handled upstream, but it's not working properly
             return
         }
-        createOrUpdateScaleStyle(scale.theme, scale.hue, name, paint)
+        createOrUpdateStyle(scale.theme, scale.hue, name, paint)
     })
     // TODO: delete all styles in theme/hue/ that aren't in scale.variants
 }
 
-function applyExistingStylesToScaleInstances(theme: string, hue: string) {
+function updateInstances(theme: string, hue: string) {
     const page = figma.root.children.find(p => p.name === `\$${theme}`)
     if (!page) {
         throw new Error(`Expected a page named "\$${theme}"`)
     }
 
     const paintStyles = figma.getLocalPaintStyles()
-    const instances = getScaleInstances(page).filter(i => i.name.trim().replace('$', '') === hue)
+    const instances = getInstances(page).filter(i => i.name.trim().replace('$', '') === hue)
     instances.forEach(instance => {
         const defaultElement = instance.findChild(n => n.name === SCALE_DEFAULT_ELEMENT_NAME) as MinimalFillsMixin & SceneNode
         const defaultExpectedVariant = DEFAULT_VARIANT_NAME
@@ -142,11 +142,11 @@ function applyExistingStylesToScaleInstances(theme: string, hue: string) {
 const commands = {
     generateStyles() {
         const page = figma.currentPage
-        const instances = getScaleInstances(page, true)
+        const instances = getInstances(page, true)
         const scales = instances.map(instance => toScale(instance, page))
         scales.forEach(scale => {
-            regenerateStylesFromScale(scale)
-            applyExistingStylesToScaleInstances(scale.theme, scale.hue)
+            updateStyles(scale)
+            updateInstances(scale.theme, scale.hue)
         })
     },
 
