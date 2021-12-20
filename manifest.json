@@ -10,6 +10,14 @@
     {
       "name": "Generate Styles",
       "command": "generateStyles"
+    },
+    {
+      "name": "Snap Scale Hue",
+      "command": "snapScaleHues"
+    },
+    {
+      "name": "Snap Scale Saturation",
+      "command": "snapScaleSaturation"
     }
   ]
 }

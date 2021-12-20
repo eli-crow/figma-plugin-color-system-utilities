@@ -7,7 +7,7 @@ const SATURATION_INDICATOR_ELEMENT_NAME = "$saturationIndicator"
 const SATURATION_INDICATOR_SPACER_NAME = "$spacer"
 const SATURATION_INDICATOR_VALUE_NAME = "$value"
 
-import { hsluvToRgb, rgbToHsluv } from "hsluv"
+import { ColorTuple, hsluvToRgb, rgbToHsluv } from "hsluv"
 import convert from 'color-convert'
 
 function getScaleReferenceComponent(): ComponentNode {
@@ -96,8 +96,8 @@ function toScale(instance: InstanceNode, page: PageNode): Scale {
     return { theme, hue, variants }
 }
 
-function createOrUpdateStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
-    const styleName = `${theme}/${hue}/${variant}`
+function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
+    const styleName = getScaleStyleName(theme, hue, variant)
     const style = figma.getLocalPaintStyles().find(s => s.name.replaceAll(/\s+/g, '') === styleName) ?? figma.createPaintStyle()
     style.name = styleName
     style.paints = [paint]
@@ -111,7 +111,7 @@ function updateStyles(scale: Scale) {
             // HACK: this should be handled upstream, but it's not working properly
             return
         }
-        createOrUpdateStyle(scale.theme, scale.hue, name, paint)
+        createOrUpdateScaleStyle(scale.theme, scale.hue, name, paint)
     })
     // TODO: delete all styles in theme/hue/ that aren't in scale.variants
 }
@@ -180,9 +180,7 @@ async function updateInstances(theme: string, hue: string) {
     const promises = instances.map(async instance => {
         const defaultElement = instance.findChild(n => n.name === SCALE_DEFAULT_ELEMENT_NAME) as MinimalFillsMixin & SceneNode
         const defaultReferenceElement = instance.findChild(n => n.name === SCALE_DEFAULT_REFERENCE_ELEMENT_NAME) as MinimalFillsMixin
-        const defaultExpectedVariant = DEFAULT_VARIANT_NAME
-        const defaultRegex = RegExp(`${theme}\s*/\s*${hue}\s*/\s*${defaultExpectedVariant}`)
-        const defaultMatchingStyle = paintStyles.find(style => style.name.match(defaultRegex))
+        const defaultMatchingStyle = findScaleStyle(paintStyles, theme, hue, DEFAULT_VARIANT_NAME)
         if (defaultMatchingStyle) {
             defaultElement.fillStyleId = defaultMatchingStyle.id
             defaultReferenceElement.fillStyleId = defaultMatchingStyle.id
@@ -192,8 +190,7 @@ async function updateInstances(theme: string, hue: string) {
         variantElements.forEach(node => {
             const expectedVariant = node.name.trim().replace('$', '')
             if (['white', 'black'].includes(expectedVariant)) return
-            const regex = RegExp(`${theme}\s*/\s*${hue}\s*/\s*${expectedVariant}`)
-            const matchingStyle = paintStyles.find(style => style.name.match(regex))
+            const matchingStyle = findScaleStyle(paintStyles, theme, hue, expectedVariant)
             if (matchingStyle) {
                 node.fillStyleId = matchingStyle.id
             }
@@ -204,18 +201,96 @@ async function updateInstances(theme: string, hue: string) {
     await Promise.all(promises)
 }
 
+function getScaleStyleName(theme: string, hue: string, variant: string) {
+    return `${theme}/${hue}/${variant}`
+}
+
+function getScaleStyleNameRegex(theme: string, hue: string, variant: string) {
+    return RegExp(`${theme}\s*/\s*${hue}\s*/\s*${variant}`)
+}
+
+function findScaleStyle(styles: PaintStyle[], theme: string, hue: string, variant: string) {
+    const regex = getScaleStyleNameRegex(theme, hue, variant)
+    return styles.find(style => style.name.match(regex))
+}
+
+function findScaleColorRgb01(styles: PaintStyle[], theme: string, hue: string, variant: string): ColorTuple {
+    const style = findScaleStyle(styles, theme, hue, variant)
+    const solid = style.paints[0] as SolidPaint
+    return [solid.color.r, solid.color.g, solid.color.b]
+}
+
 async function loadFontsForText(node: TextNode) {
     const fonts = node.getRangeAllFontNames(0, node.characters.length)
     await Promise.all(fonts.map(font => figma.loadFontAsync(font)))
 }
 
+function clamp(n: number, min: number, max: number) {
+    return Math.min(Math.max(n, min), max)
+}
+
+function clamp01(n: number) {
+    return Math.min(Math.max(n, 0), 1)
+}
+
+function snap(scale: Scale, getRgb: (defaultHsl: ColorTuple, oldHsl: ColorTuple) => ColorTuple) {
+    const styles = figma.getLocalPaintStyles()
+    const defaultRgb = findScaleColorRgb01(styles, scale.theme, scale.hue, DEFAULT_VARIANT_NAME)
+    const defaultHsl = rgbToHsluv(defaultRgb)
+    scale.variants.forEach(variant => {
+        const oldRgb = variant.paint.color
+        const oldHsl = rgbToHsluv([oldRgb.r, oldRgb.g, oldRgb.b])
+        const [r, g, b] = getRgb(defaultHsl, oldHsl)
+        const paint: SolidPaint = {
+            type: "SOLID",
+            color: { r, g, b },
+            visible: true
+        }
+        createOrUpdateScaleStyle(scale.theme, scale.hue, variant.name, paint)
+    })
+}
+
+function snapScaleStyleSaturation(scale: Scale) {
+    snap(scale, (def, old) => hsluvToRgb([old[0], def[1], old[2]]).map(clamp01) as ColorTuple)
+}
+
+function snapScaleStyleHues(scale: Scale) {
+    snap(scale, (def, old) => hsluvToRgb([def[0], old[1], old[2]]).map(clamp01) as ColorTuple)
+}
+
+// TODO: async function snapLighness
+
 const commands = {
     async generateStyles() {
         const page = figma.currentPage
-        const instances = getInstances(page, true)
-        const scales = instances.map(instance => toScale(instance, page))
+        const selectedInstances = getInstances(page, true)
+        const scales = selectedInstances.map(instance => toScale(instance, page))
         const promises = scales.map(async scale => {
             updateStyles(scale)
+            await updateInstances(scale.theme, scale.hue)
+        })
+        await Promise.all(promises)
+    },
+
+    async snapScaleHues() {
+        const page = figma.currentPage
+        const selectedInstances = getInstances(page, true)
+        const scales = selectedInstances.map(instance => toScale(instance, page))
+        const promises = scales.map(async scale => {
+            snapScaleStyleHues(scale)
+            // necessary to update?
+            await updateInstances(scale.theme, scale.hue)
+        })
+        await Promise.all(promises)
+    },
+
+    async snapScaleSaturation() {
+        const page = figma.currentPage
+        const selectedInstances = getInstances(page, true)
+        const scales = selectedInstances.map(instance => toScale(instance, page))
+        const promises = scales.map(async scale => {
+            snapScaleStyleSaturation(scale)
+            // necessary to update?
             await updateInstances(scale.theme, scale.hue)
         })
         await Promise.all(promises)
