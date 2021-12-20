@@ -1,7 +1,14 @@
 const SCALE_REFERENCE_COMPONENT_NAME = "$ScaleReference"
 const SCALE_LIST_ELEMENT_NAME = "$scale"
 const SCALE_DEFAULT_ELEMENT_NAME = "$default"
+const SCALE_DEFAULT_REFERENCE_ELEMENT_NAME = "$defaultReference"
 const DEFAULT_VARIANT_NAME = "DEFAULT"
+const SATURATION_INDICATOR_ELEMENT_NAME = "$saturationIndicator"
+const SATURATION_INDICATOR_SPACER_NAME = "$spacer"
+const SATURATION_INDICATOR_VALUE_NAME = "$value"
+
+import { hsluvToRgb, rgbToHsluv } from "hsluv"
+import convert from 'color-convert'
 
 function getScaleReferenceComponent(): ComponentNode {
     const referenceComponents = figma.root.findAll(n =>
@@ -109,10 +116,55 @@ function updateStyles(scale: Scale) {
     // TODO: delete all styles in theme/hue/ that aren't in scale.variants
 }
 
-function updateInstances(theme: string, hue: string) {
+async function updateSaturationIndicator(instance: InstanceNode, isDarkTheme) {
+    const reference = instance.findOne(node => node.name === SCALE_DEFAULT_REFERENCE_ELEMENT_NAME) as ChildrenMixin & SceneNode & MinimalFillsMixin
+    const indicator = reference.findOne(node => node.name === SATURATION_INDICATOR_ELEMENT_NAME) as ChildrenMixin & SceneNode
+    const spacer = indicator.findOne(node => node.name === SATURATION_INDICATOR_SPACER_NAME) as TextNode
+    const value = indicator.findOne(node => node.name === SATURATION_INDICATOR_VALUE_NAME) as TextNode
+
+    // TODO: get DEFAULT variant more intelligently
+    const { r, g, b } = ((reference.fills as Paint[]).find(p => p.type === 'SOLID') as SolidPaint).color
+    const [h, ,] = convert.rgb.hsv([r * 255, g * 255, b * 255])
+    const rgbSaturated = convert.hsv.rgb([h, 100, 100])
+    const [, , lightness] = rgbToHsluv(rgbSaturated.map(v => v / 255))
+
+    // TODO: get list of varriants from numeric scale
+    const stops = [0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].sort((a, b) => a - b)
+    const i1 = stops.findIndex(stop => stop / 10 > lightness)
+    const i0 = i1 - 1
+    const l1 = stops[i1] / 10
+    const l0 = stops[i0] / 10
+    const y1 = i1 / stops.length
+    const y0 = i0 / stops.length
+
+    let y = 0
+    let intensity = 0
+    if (isDarkTheme) {
+        const t = (lightness - l0) / (l1 - l0)
+        y = y0 + (t * (y1 - y0))
+        intensity = lightness * 10
+    } else {
+        // TODO: check this
+        const invertedLightness = 100 - lightness
+        const t = (invertedLightness - l0) / (l1 - l0)
+        y = y0 + (t * (y1 - y0))
+        intensity = invertedLightness * 10
+    }
+
+    indicator.visible = true
+
+    await loadFontsForText(spacer)
+    spacer.visible = true
+    spacer.characters = ' '
+    spacer.lineHeight = { value: reference.height * y, unit: "PIXELS" }
+
+    await loadFontsForText(value)
+    value.characters = Math.round(intensity).toString()
+}
+
+async function updateInstances(theme: string, hue: string) {
     // TODO: apply color to against default reference
     // TODO: find any non-gray styles inside sample and apply corresponding color
-    // TODO: show appropriate saturation indicator and value
     // TODO: update tilte to reflect implied name
 
     const page = figma.root.children.find(p => p.name === `\$${theme}`)
@@ -120,15 +172,20 @@ function updateInstances(theme: string, hue: string) {
         throw new Error(`Expected a page named "\$${theme}"`)
     }
 
+    // TODO: base isDarkTheme on the backgorundColor of the page.
+    const isDarkTheme = theme === 'dark'
+
     const paintStyles = figma.getLocalPaintStyles()
     const instances = getInstances(page).filter(i => i.name.trim().replace('$', '') === hue)
-    instances.forEach(instance => {
+    const promises = instances.map(async instance => {
         const defaultElement = instance.findChild(n => n.name === SCALE_DEFAULT_ELEMENT_NAME) as MinimalFillsMixin & SceneNode
+        const defaultReferenceElement = instance.findChild(n => n.name === SCALE_DEFAULT_REFERENCE_ELEMENT_NAME) as MinimalFillsMixin
         const defaultExpectedVariant = DEFAULT_VARIANT_NAME
         const defaultRegex = RegExp(`${theme}\s*/\s*${hue}\s*/\s*${defaultExpectedVariant}`)
         const defaultMatchingStyle = paintStyles.find(style => style.name.match(defaultRegex))
         if (defaultMatchingStyle) {
             defaultElement.fillStyleId = defaultMatchingStyle.id
+            defaultReferenceElement.fillStyleId = defaultMatchingStyle.id
         }
 
         const variantElements = getVariantElements(instance)
@@ -141,18 +198,27 @@ function updateInstances(theme: string, hue: string) {
                 node.fillStyleId = matchingStyle.id
             }
         })
+
+        await updateSaturationIndicator(instance, isDarkTheme)
     })
+    await Promise.all(promises)
+}
+
+async function loadFontsForText(node: TextNode) {
+    const fonts = node.getRangeAllFontNames(0, node.characters.length)
+    await Promise.all(fonts.map(font => figma.loadFontAsync(font)))
 }
 
 const commands = {
-    generateStyles() {
+    async generateStyles() {
         const page = figma.currentPage
         const instances = getInstances(page, true)
         const scales = instances.map(instance => toScale(instance, page))
-        scales.forEach(scale => {
+        const promises = scales.map(async scale => {
             updateStyles(scale)
-            updateInstances(scale.theme, scale.hue)
+            await updateInstances(scale.theme, scale.hue)
         })
+        await Promise.all(promises)
     },
 
     //TODO: regenerateScale
@@ -185,10 +251,10 @@ const commands = {
     // use parameters, find the right color based on name. same theme, different hue
 }
 
-function main() {
+async function main() {
     const commandToRun = commands[figma.command]
     if (commandToRun) {
-        commandToRun()
+        await commandToRun()
     } else {
         throw new Error(`Command "${figma.command}" not found.`)
     }

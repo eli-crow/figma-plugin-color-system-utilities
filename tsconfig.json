@@ -1,7 +1,4 @@
 {
-  "files": [
-    "src/index.ts"
-  ],
   "compilerOptions": {
     "target": "es6",
     "lib": [
@@ -12,7 +9,9 @@
       "./node_modules/@figma"
     ],
     "outDir": "dist/",
-    "outFile": "dist/code.js"
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node"
   },
   "watchOptions": {
     "watchFile": "useFsEvents",
@@ -23,9 +22,6 @@
       "**/node_modules",
       "_build",
       "dist"
-    ],
-    "excludeFiles": [
-      "build/fileWhichChangesOften.ts"
     ]
   }
 }
