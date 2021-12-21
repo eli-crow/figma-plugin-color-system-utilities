@@ -31,7 +31,7 @@ function getInstances(page: PageNode, selected: boolean = false): InstanceNode[]
     const isInstance = node =>
         node.type === "INSTANCE" &&
         node.visible &&
-        node.mainComponent.name === SCALE_REFERENCE_COMPONENT_NAME &&
+        node.mainComponent.parent?.name === SCALE_REFERENCE_COMPONENT_NAME &&
         node.name.startsWith("$")
 
     const instances = selected
@@ -39,7 +39,7 @@ function getInstances(page: PageNode, selected: boolean = false): InstanceNode[]
         : page.findAll(isInstance) as InstanceNode[]
 
     if (instances.length === 0) {
-        throw new Error(`Please select one or more instances of "${SCALE_REFERENCE_COMPONENT_NAME}" component at the root level with a layer name like "$hue"`)
+        throw new Error(`Please select one or more instances of "${SCALE_REFERENCE_COMPONENT_NAME}" component at the root level with a layer name like "$hue".`)
     }
 
     return instances
@@ -49,8 +49,8 @@ function getVariantElements(instance: InstanceNode) {
     const scaleElements = instance.findAll(n => n.name === SCALE_LIST_ELEMENT_NAME) as ChildrenMixin[]
     const variantElements = scaleElements.flatMap(scaleElement => {
         return scaleElement.children.filter(node =>
-            node.type === 'RECTANGLE' || node.type === 'FRAME' || node.type === 'VECTOR' &&
-            node.name.trim() !== 'black' && node.name.trim() !== 'white' &&
+            node.type === 'RECTANGLE' || node.type === 'FRAME' || node.type === 'VECTOR' || node.type === 'INSTANCE' &&
+            !(node.name.startsWith('.') || node.name.startsWith('_')) &&
             node.fills !== figma.mixed && node.fills.length === 1 && node.fills[0].type === 'SOLID'
         )
     }) as (MinimalFillsMixin & SceneNode)[]
@@ -267,6 +267,12 @@ const commands = {
         })
     },
 
+    async updateScaleReferences() {
+        await forEachSelectedScale(async scale => {
+            await updateInstances(scale.theme, scale.hue)
+        })
+    },
+
     async snapScale(parameters: ParameterValues) {
         await forEachSelectedScale(async scale => {
             snapScale(scale, (variant, base, old) => {
@@ -289,7 +295,7 @@ const commands = {
                 else if (parameters.property === 'Hue') {
                     return lchToRgb([oldLch[0], oldLch[1], baseLch[2]]) as ColorTuple
                 }
-                else if (parameters.property === 'All') {
+                else {
                     return lchToRgb([luma, baseLch[1], baseLch[2]]) as ColorTuple
                 }
             })
@@ -313,13 +319,6 @@ const commands = {
     // For each instance of $ScaleReference on that page,
     // generateScaleFromDefault()
     // blocker: how do you determine whether the theme is lightish or darkish? What is the threshold?
-
-    //TODO: snapColor
-    // find the right theme by finding the page with the background color most similar to the current page
-    // for evey paint style with exactly one SolidPaint among the selection
-    // find the most similar color among numeric variants in the right theme and apply the paint style
-    // stretch: for every GradientStop in every GradientPaint, apply the fill color to the gradient stop.
-    // stretch: for every
 
     //TODO: changeTheme <theme>
     // use parameters, find the right color based on name. same hue, different theme

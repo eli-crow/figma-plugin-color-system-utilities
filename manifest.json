@@ -12,9 +12,12 @@
       "command": "generateScaleStyles"
     },
     {
+      "name": "Update Scale References",
+      "command": "updateScaleReferences"
+    },
+    {
       "name": "Snap Scale",
-      "command": "snapScaleHue",
-      "parameterOnly": false,
+      "command": "snapScale",
       "parameters": [
         {
           "name": "Property",
