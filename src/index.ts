@@ -285,14 +285,14 @@ const commands = {
                 }
                 const luma = scale.isDark
                     ? (intensity / 10)
-                    : 1 - (intensity / 10)
-                if (parameters.property === 'Luma') {
+                    : 100 - (intensity / 10)
+                if (parameters.property.toLowerCase() === 'luma') {
                     return lchToRgb([luma, oldLch[1], oldLch[2]]) as ColorTuple
                 }
-                else if (parameters.property === 'Chroma') {
+                else if (parameters.property.toLowerCase() === 'chroma') {
                     return lchToRgb([oldLch[0], baseLch[1], oldLch[2]]) as ColorTuple
                 }
-                else if (parameters.property === 'Hue') {
+                else if (parameters.property.toLowerCase() === 'hue') {
                     return lchToRgb([oldLch[0], oldLch[1], baseLch[2]]) as ColorTuple
                 }
                 else {
@@ -303,10 +303,6 @@ const commands = {
             await updateInstances(scale.theme, scale.hue)
         })
     },
-
-    //TODO: regenerateScale
-    // generate a scale based on the default variant of the selected instance.
-    // stretch: automate red / yellow shift for yellowish hues
 
     //TODO: blendScale
     // for a selection of fillable nodes with numeric names in the range (0, 1000), where all elements share a parent
