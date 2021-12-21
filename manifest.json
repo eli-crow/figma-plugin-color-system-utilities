@@ -8,16 +8,19 @@
   ],
   "menu": [
     {
-      "name": "Generate Styles",
-      "command": "generateStyles"
+      "name": "Generate Scale Styles",
+      "command": "generateScaleStyles"
     },
     {
-      "name": "Snap Scale Hue",
-      "command": "snapScaleHues"
-    },
-    {
-      "name": "Snap Scale Saturation",
-      "command": "snapScaleSaturation"
+      "name": "Snap Scale",
+      "command": "snapScaleHue",
+      "parameterOnly": false,
+      "parameters": [
+        {
+          "name": "Property",
+          "key": "property"
+        }
+      ]
     }
   ]
 }

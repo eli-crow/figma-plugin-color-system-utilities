@@ -7,7 +7,7 @@ const SATURATION_INDICATOR_ELEMENT_NAME = "$saturationIndicator"
 const SATURATION_INDICATOR_SPACER_NAME = "$spacer"
 const SATURATION_INDICATOR_VALUE_NAME = "$value"
 
-import { ColorTuple, hsluvToRgb, rgbToHsluv } from "hsluv"
+import { ColorTuple, hsluvToRgb, lchToRgb, rgbToHsluv, rgbToLch } from "hsluv"
 import convert from 'color-convert'
 
 function getScaleReferenceComponent(): ComponentNode {
@@ -64,7 +64,8 @@ interface Variant {
 interface Scale {
     theme: string
     hue: string
-    variants: Variant[]
+    variants: Variant[],
+    isDark: boolean,
 }
 function toScale(instance: InstanceNode, page: PageNode): Scale {
     const theme = page.name.trim().replace("$", '')
@@ -93,7 +94,7 @@ function toScale(instance: InstanceNode, page: PageNode): Scale {
         })
     })
 
-    return { theme, hue, variants }
+    return { theme, hue, variants, isDark: theme === 'dark' }
 }
 
 function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
@@ -233,67 +234,68 @@ function clamp01(n: number) {
     return Math.min(Math.max(n, 0), 1)
 }
 
-function snap(scale: Scale, getRgb: (defaultHsl: ColorTuple, oldHsl: ColorTuple) => ColorTuple) {
+function snapScale(scale: Scale, getRgb: (variant: Variant, base: ColorTuple, old: ColorTuple) => ColorTuple) {
     const styles = figma.getLocalPaintStyles()
     const defaultRgb = findScaleColorRgb01(styles, scale.theme, scale.hue, DEFAULT_VARIANT_NAME)
-    const defaultHsl = rgbToHsluv(defaultRgb)
     scale.variants.forEach(variant => {
-        const oldRgb = variant.paint.color
-        const oldHsl = rgbToHsluv([oldRgb.r, oldRgb.g, oldRgb.b])
-        const [r, g, b] = getRgb(defaultHsl, oldHsl)
+        const { r, g, b } = variant.paint.color
+        const newRgb = getRgb(variant, defaultRgb, [r, g, b]).map(clamp01)
         const paint: SolidPaint = {
             type: "SOLID",
-            color: { r, g, b },
+            color: { r: newRgb[0], g: newRgb[1], b: newRgb[2] },
             visible: true
         }
         createOrUpdateScaleStyle(scale.theme, scale.hue, variant.name, paint)
     })
 }
 
-function snapScaleStyleSaturation(scale: Scale) {
-    snap(scale, (def, old) => hsluvToRgb([old[0], def[1], old[2]]).map(clamp01) as ColorTuple)
-}
-
-function snapScaleStyleHues(scale: Scale) {
-    snap(scale, (def, old) => hsluvToRgb([def[0], old[1], old[2]]).map(clamp01) as ColorTuple)
+async function forEachSelectedScale(visitor: (scale: Scale) => Promise<void> | void) {
+    const page = figma.currentPage
+    const selectedInstances = getInstances(page, true)
+    const scales = selectedInstances.map(instance => toScale(instance, page))
+    const promises = scales.map(visitor)
+    await Promise.all(promises)
 }
 
 // TODO: async function snapLighness
 
 const commands = {
-    async generateStyles() {
-        const page = figma.currentPage
-        const selectedInstances = getInstances(page, true)
-        const scales = selectedInstances.map(instance => toScale(instance, page))
-        const promises = scales.map(async scale => {
+    async generateScaleStyles() {
+        await forEachSelectedScale(async scale => {
             updateStyles(scale)
             await updateInstances(scale.theme, scale.hue)
         })
-        await Promise.all(promises)
     },
 
-    async snapScaleHues() {
-        const page = figma.currentPage
-        const selectedInstances = getInstances(page, true)
-        const scales = selectedInstances.map(instance => toScale(instance, page))
-        const promises = scales.map(async scale => {
-            snapScaleStyleHues(scale)
+    async snapScale(parameters: ParameterValues) {
+        await forEachSelectedScale(async scale => {
+            snapScale(scale, (variant, base, old) => {
+                const baseLch = rgbToLch(base)
+                const oldLch = rgbToLch(old)
+                const intensity = parseInt(variant.name)
+                if (Number.isNaN(intensity)) {
+                    console.warn(`Variant "${variant.name}" was ignored because it is not a number between 0 and 1000`)
+                    return old
+                }
+                const luma = scale.isDark
+                    ? (intensity / 10)
+                    : 1 - (intensity / 10)
+                if (parameters.property === 'Luma') {
+                    return lchToRgb([luma, oldLch[1], oldLch[2]]) as ColorTuple
+                }
+                else if (parameters.property === 'Chroma') {
+                    return lchToRgb([oldLch[0], baseLch[1], oldLch[2]]) as ColorTuple
+                }
+                else if (parameters.property === 'Hue') {
+                    return lchToRgb([oldLch[0], oldLch[1], baseLch[2]]) as ColorTuple
+                }
+                else if (parameters.property === 'All') {
+                    return lchToRgb([luma, baseLch[1], baseLch[2]]) as ColorTuple
+                }
+            })
             // necessary to update?
             await updateInstances(scale.theme, scale.hue)
         })
-        await Promise.all(promises)
-    },
-
-    async snapScaleSaturation() {
-        const page = figma.currentPage
-        const selectedInstances = getInstances(page, true)
-        const scales = selectedInstances.map(instance => toScale(instance, page))
-        const promises = scales.map(async scale => {
-            snapScaleStyleSaturation(scale)
-            // necessary to update?
-            await updateInstances(scale.theme, scale.hue)
-        })
-        await Promise.all(promises)
     },
 
     //TODO: regenerateScale
@@ -325,16 +327,22 @@ const commands = {
     //TODO: changeHue
     // use parameters, find the right color based on name. same theme, different hue
 }
+figma.parameters.on('input', ({ parameters, key, query, result }: ParameterInputEvent) => {
+    switch (key) {
+        case 'property':
+            result.setSuggestions(["Chroma", "Luma", "Hue", "All"])
+            break
 
-async function main() {
-    const commandToRun = commands[figma.command]
+        default:
+            return
+    }
+})
+figma.on('run', async ({ command, parameters }: RunEvent) => {
+    const commandToRun = commands[command]
     if (commandToRun) {
-        await commandToRun()
+        await commandToRun(parameters)
     } else {
         throw new Error(`Command "${figma.command}" not found.`)
     }
-
     figma.closePlugin()
-}
-
-main()
+})
