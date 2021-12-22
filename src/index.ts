@@ -2,13 +2,15 @@ const SCALE_REFERENCE_COMPONENT_NAME = "$ScaleReference"
 const SCALE_LIST_ELEMENT_NAME = "$scale"
 const SCALE_DEFAULT_ELEMENT_NAME = "$default"
 const SCALE_DEFAULT_REFERENCE_ELEMENT_NAME = "$defaultReference"
+const VARIANT_COMPONENT_NAME = "$Variant"
 const DEFAULT_VARIANT_NAME = "DEFAULT"
 const SATURATION_INDICATOR_ELEMENT_NAME = "$saturationIndicator"
 const SATURATION_INDICATOR_SPACER_NAME = "$spacer"
 const SATURATION_INDICATOR_VALUE_NAME = "$value"
 
-import { ColorTuple, hsluvToRgb, lchToRgb, rgbToHsluv, rgbToLch } from "hsluv"
+import { ColorTuple, hsluvToLch, lchToHsluv, lchToRgb, rgbToHsluv, rgbToLch } from "hsluv"
 import convert from 'color-convert'
+import { interpolateSmooth } from "./smooth"
 
 function getScaleReferenceComponent(): ComponentNode {
     const referenceComponents = figma.root.findAll(n =>
@@ -59,7 +61,7 @@ function getVariantElements(instance: InstanceNode) {
 
 interface Variant {
     name: string
-    paint: SolidPaint
+    style: PaintStyle
 }
 interface Scale {
     theme: string
@@ -70,31 +72,38 @@ interface Scale {
 function toScale(instance: InstanceNode, page: PageNode): Scale {
     const theme = page.name.trim().replace("$", '')
     const hue = instance.name.trim().replace("$", '')
-    const variants: Variant[] = []
+    return getScale(theme, hue)
+}
+
+function createOrUpdateScaleFromInstance(instance: InstanceNode, page: PageNode) {
+    const theme = page.name.trim().replace("$", '')
+    const hue = instance.name.trim().replace("$", '')
 
     // TODO: edge cases here: default element has anything oother than exactly one solid fill
-    const defaultElement = instance.findChild(n => n.name === SCALE_DEFAULT_ELEMENT_NAME) as MinimalFillsMixin & SceneNode
+    const defaultElement = instance.findChild(n => n.name === SCALE_DEFAULT_ELEMENT_NAME) as MinimalFillsMixin
     if (!defaultElement) {
         throw new Error(`Could not find default element named "\$${SCALE_DEFAULT_ELEMENT_NAME}"`)
     }
-    variants.push({
-        name: DEFAULT_VARIANT_NAME,
-        paint: defaultElement.fills[0]
-    })
+    if (hasValidScaleStyleFill(defaultElement)) {
+        createOrUpdateScaleStyle(theme, hue, DEFAULT_VARIANT_NAME, defaultElement.fills[0])
+    }
 
     const variantElements = getVariantElements(instance)
     if (variantElements.length === 0) {
         throw new Error("Did not find any scale variants. Scale elements should have exactly one solid fill.")
     }
-    variantElements.forEach(n => {
-        // TODO handle the case where there is already a fill style assigned to this element.
-        variants.push({
-            name: n.name.trim(),
-            paint: n.fills[0]
-        })
+    variantElements.forEach(node => {
+        // TODO: handle the case where there is already a fill style assigned to this element.
+        const variant = node.name.trim()
+        if (hasValidScaleStyleFill(node)) {
+            const paint = node.fills[0]
+            createOrUpdateScaleStyle(theme, hue, variant, paint)
+        }
     })
+}
 
-    return { theme, hue, variants, isDark: theme === 'dark' }
+function hasValidScaleStyleFill(node: MinimalFillsMixin) {
+    return !(node.fills === figma.mixed || node.fills.length !== 1 || node.fills[0].type !== 'SOLID')
 }
 
 function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, paint: SolidPaint) {
@@ -107,10 +116,10 @@ function createOrUpdateScaleStyle(theme: string, hue: string, variant: string, p
 }
 
 function updateStyles(scale: Scale) {
-    scale.variants.forEach(({ name, paint }) => {
-        if (name === 'white' || name === 'black') {
-            // HACK: this should be handled upstream, but it's not working properly
-            return
+    scale.variants.forEach(({ name, style }) => {
+        const paint = style.paints[0]
+        if (style.paints.length !== 1 || paint.type !== 'SOLID') {
+            throw new Error("All variant color styles should have exactly one solid fill")
         }
         createOrUpdateScaleStyle(scale.theme, scale.hue, name, paint)
     })
@@ -207,7 +216,17 @@ function getScaleStyleName(theme: string, hue: string, variant: string) {
 }
 
 function getScaleStyleNameRegex(theme: string, hue: string, variant: string) {
-    return RegExp(`${theme}\s*/\s*${hue}\s*/\s*${variant}`)
+    return RegExp(`${theme}\s*/\\s*${hue}\\s*/\\s*${variant}`)
+}
+
+function getScaleStyleNameParts(name: string) {
+    const match = /^([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*([^/]+?)$/.exec(name.trim())
+    if (match) {
+        const [, theme, hue, variant] = match
+        return { theme, hue, variant }
+    } else {
+        return null
+    }
 }
 
 function findScaleStyle(styles: PaintStyle[], theme: string, hue: string, variant: string) {
@@ -238,7 +257,7 @@ function snapScale(scale: Scale, getRgb: (variant: Variant, base: ColorTuple, ol
     const styles = figma.getLocalPaintStyles()
     const defaultRgb = findScaleColorRgb01(styles, scale.theme, scale.hue, DEFAULT_VARIANT_NAME)
     scale.variants.forEach(variant => {
-        const { r, g, b } = variant.paint.color
+        const { r, g, b } = (variant.style.paints[0] as SolidPaint).color
         const newRgb = getRgb(variant, defaultRgb, [r, g, b]).map(clamp01)
         const paint: SolidPaint = {
             type: "SOLID",
@@ -257,14 +276,129 @@ async function forEachSelectedScale(visitor: (scale: Scale) => Promise<void> | v
     await Promise.all(promises)
 }
 
+function lerp(t: number, min: number, max: number) {
+    return min + t * (max - min)
+}
+
+// sort of opinionated / subjective
+function clampLch(lch: ColorTuple, baseLch: ColorTuple): ColorTuple {
+    const hsluv = lchToHsluv(lch)
+    const baseHsluv = lchToHsluv(baseLch)
+    // values lighter than the base should not be more saturated.
+    const maxChromaFromBase = hsluv[0] > baseHsluv[0] ? baseHsluv[1] : Infinity
+    return hsluvToLch([
+        hsluv[0],
+        Math.min(hsluv[1], maxChromaFromBase, 100),
+        hsluv[2]
+    ])
+}
+
+enum ColorProperty {
+    Lightness = 'lightness',
+    Saturation = 'saturation',
+    Hue = 'hue',
+    All = 'all',
+}
+enum ColorModel {
+    LCH = 'lch'
+}
+function fixLch(scale: Scale, property: ColorProperty) {
+    snapScale(scale, (variant, base, old) => {
+        const baseLch = rgbToLch(base)
+        const oldLch = rgbToLch(old)
+        const intensity = parseInt(variant.name)
+        if (Number.isNaN(intensity)) {
+            return old
+        }
+        const luma = scale.isDark
+            ? (intensity / 10)
+            : 100 - (intensity / 10)
+
+        if (property.toLowerCase() === ColorProperty.Lightness) {
+            return lchToRgb(clampLch([luma, oldLch[1], oldLch[2]], baseLch))
+        }
+        else if (property.toLowerCase() === ColorProperty.Saturation) {
+            return lchToRgb(clampLch([oldLch[0], baseLch[1], oldLch[2]], baseLch))
+        }
+        else if (property.toLowerCase() === ColorProperty.Hue) {
+            return lchToRgb(clampLch([oldLch[0], oldLch[1], baseLch[2]], baseLch))
+        }
+        else if (property.toLowerCase() === ColorProperty.All) {
+            return lchToRgb(clampLch([luma, baseLch[1], baseLch[2]], baseLch))
+        }
+        else {
+            throw new Error(`Property "${property}" is not valid.`)
+        }
+    })
+}
+
+function getScale(theme: string, hue: string): Scale {
+    const styles = figma.getLocalPaintStyles()
+
+    const variants: Variant[] = []
+    styles.forEach(style => {
+        const parts = getScaleStyleNameParts(style.name)
+        if (parts && parts.theme === theme && parts.hue === hue) {
+            variants.push({
+                name: parts.variant,
+                style: style
+            })
+        }
+
+    })
+
+    if (variants.length === 0) return null
+
+    // HACK.
+    const isDark = theme === 'dark'
+
+    return { hue, theme, variants, isDark }
+}
+
+function smoothLch(scale: Scale, knownVariants: Variant[], property: ColorProperty) {
+    const knownLch = knownVariants.map(variant => {
+        const { r, g, b } = (variant.style.paints[0] as SolidPaint).color
+        const rgb = [r, g, b] as ColorTuple
+        return rgbToLch(rgb)
+    })
+    scale.variants.forEach(variant => {
+        if (knownVariants.some(v => v.name === variant.name)) return
+        const intensity = parseInt(variant.name)
+        if (Number.isNaN(intensity)) return
+        const luma = scale.isDark
+            ? (intensity / 10)
+            : 100 - (intensity / 10)
+        const interpolatedLch = interpolateSmooth(luma, knownLch)
+        const rgb = lchToRgb(interpolatedLch).map(clamp01)
+        const fill: SolidPaint = {
+            type: "SOLID",
+            color: { r: rgb[0], g: rgb[1], b: rgb[2] }
+        }
+        if (property === ColorProperty.All) {
+            createOrUpdateScaleStyle(scale.theme, scale.hue, variant.name, fill)
+        }
+    })
+}
+
 // TODO: async function snapLighness
 
 const commands = {
-    async generateScaleStyles() {
+    async updateStyles() {
         await forEachSelectedScale(async scale => {
+            // TODO: this should update styles from the instance
             updateStyles(scale)
             await updateInstances(scale.theme, scale.hue)
         })
+    },
+
+    async generateScale() {
+        const page = figma.currentPage
+        const instances = getInstances(figma.currentPage, true)
+        const promises = instances.map(async instance => {
+            createOrUpdateScaleFromInstance(instance, page)
+        })
+        await Promise.all(promises)
+        await commands.fix({ property: ColorProperty.All, model: ColorModel.LCH })
     },
 
     async updateScaleReferences() {
@@ -273,41 +407,58 @@ const commands = {
         })
     },
 
-    async snapScale(parameters: ParameterValues) {
+    async smooth(parameters: ParameterValues) {
+        const selectedVariants = figma.currentPage.selection.filter(node =>
+            node.type === 'INSTANCE' &&
+            node.fills !== figma.mixed && node.fills.length === 1 && node.fills[0].type === 'SOLID' &&
+            node.parent &&
+            node.mainComponent?.name === VARIANT_COMPONENT_NAME
+        )
+
+        if (selectedVariants.length < 2 ||
+            selectedVariants[0].parent !== selectedVariants[1].parent) {
+            throw new Error("select two or more variants in a scale.")
+        }
+
+        // HACK: hacky hacky hack hack
+        const styles = figma.getLocalPaintStyles()
+        const knownStyles = selectedVariants.map(node => {
+            const style = styles.find(style => style.id === (node as MinimalFillsMixin).fillStyleId)
+            return style
+        })
+        const knownVariants = knownStyles.map<Variant>(style => {
+            const { variant } = getScaleStyleNameParts(style.name)
+            return {
+                name: variant,
+                style: style,
+            }
+        })
+        const { theme, hue } = getScaleStyleNameParts(knownStyles[0].name)
+        const scale = getScale(theme, hue)
+
+        if (!parameters.model || parameters.model === ColorModel.LCH) {
+            smoothLch(scale, knownVariants, parameters.property)
+        } else {
+            throw new Error(`Model "${parameters.model} is not valid"`)
+        }
+    },
+
+    async fix(parameters: ParameterValues) {
         await forEachSelectedScale(async scale => {
-            snapScale(scale, (variant, base, old) => {
-                const baseLch = rgbToLch(base)
-                const oldLch = rgbToLch(old)
-                const intensity = parseInt(variant.name)
-                if (Number.isNaN(intensity)) {
-                    console.warn(`Variant "${variant.name}" was ignored because it is not a number between 0 and 1000`)
-                    return old
-                }
-                const luma = scale.isDark
-                    ? (intensity / 10)
-                    : 100 - (intensity / 10)
-                if (parameters.property.toLowerCase() === 'luma') {
-                    return lchToRgb([luma, oldLch[1], oldLch[2]]) as ColorTuple
-                }
-                else if (parameters.property.toLowerCase() === 'chroma') {
-                    return lchToRgb([oldLch[0], baseLch[1], oldLch[2]]) as ColorTuple
-                }
-                else if (parameters.property.toLowerCase() === 'hue') {
-                    return lchToRgb([oldLch[0], oldLch[1], baseLch[2]]) as ColorTuple
-                }
-                else {
-                    return lchToRgb([luma, baseLch[1], baseLch[2]]) as ColorTuple
-                }
-            })
+            if (!parameters.model || parameters.model === ColorModel.LCH) {
+                fixLch(scale, parameters.property)
+            } else {
+                throw new Error(`Model "${parameters.model} is not valid"`)
+            }
             // necessary to update?
             await updateInstances(scale.theme, scale.hue)
         })
     },
 
-    //TODO: blendScale
-    // for a selection of fillable nodes with numeric names in the range (0, 1000), where all elements share a parent
-    // use catmullRom interpolation to generate blended colors for unselected variants in HCL space
-    // the hues of black and white should be interpreted from the nearest selected variant
+    //TODO: smooth
+    // select a $variant within a scale.
+    // Run "Smooth"
+    // Any unselected variants will be smoothed using
 
     //TODO: regenerateAllScales
     // For each page starting with $
@@ -323,21 +474,46 @@ const commands = {
     // use parameters, find the right color based on name. same theme, different hue
 }
 figma.parameters.on('input', ({ parameters, key, query, result }: ParameterInputEvent) => {
+    const fuzzyMatch = ({ name, data }) => !query || name.toLowerCase().includes(query.toLowerCase())
+
     switch (key) {
-        case 'property':
-            result.setSuggestions(["Chroma", "Luma", "Hue", "All"])
+        case 'model': {
+            const options = [
+                { name: "LCH", data: ColorModel.LCH }
+            ]
+            result.setSuggestions(options.filter(fuzzyMatch))
             break
+        }
+
+        case 'property': {
+            const options = [
+                { name: "🩸 Saturation", data: ColorProperty.Saturation },
+                { name: "☀️ Lightness", data: ColorProperty.Lightness },
+                { name: "🎨 Hue", data: ColorProperty.Hue },
+                { name: "All", data: ColorProperty.All },
+            ]
+            result.setSuggestions(options.filter(fuzzyMatch))
+            break
+        }
 
         default:
             return
     }
 })
+
 figma.on('run', async ({ command, parameters }: RunEvent) => {
     const commandToRun = commands[command]
+
     if (commandToRun) {
-        await commandToRun(parameters)
+        try {
+            await commandToRun(parameters)
+        } catch (e) {
+            console.error(e)
+            figma.notify(e.message, { error: true })
+        }
     } else {
         throw new Error(`Command "${figma.command}" not found.`)
     }
+
     figma.closePlugin()
 })
