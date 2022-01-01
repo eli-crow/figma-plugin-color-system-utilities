@@ -1,5 +1,6 @@
-import { LightnessScaleOptions, Scale, ScaleNode, ScaleStopNode } from "../types";
-import { getStopNodes, isScaleStop, parseScaleNodeName } from "./scaleUtilities";
+import { cssColorToRGB } from "../color/colorUtilities";
+import { LightnessScaleOptions, Scale, ScaleNode } from "../types";
+import { getStopNodes, parseScaleNodeName } from "./scaleUtilities";
 
 function ceilToPowerOf10(number) {
     return Math.pow(10, Math.ceil(Math.log10(number)))
@@ -9,9 +10,9 @@ function interpretOptions(scaleNode: ScaleNode): LightnessScaleOptions {
     const { name, theme } = parseScaleNodeName(scaleNode.name)
 
     // TODO: figure out how to specify these colors.
-    const referenceBase = '#6463EA'
-    const referenceDarkest = '#0A081E'
-    const referenceLightest = '#FBFBFF'
+    const referenceBase = cssColorToRGB('#6463EA')
+    const referenceDarkest = cssColorToRGB('#0A081E')
+    const referenceLightest = cssColorToRGB('#FBFBFF')
 
     const stopNodes = getStopNodes(scaleNode)
     const stopNumbers = stopNodes.map(node => parseInt(node.name))

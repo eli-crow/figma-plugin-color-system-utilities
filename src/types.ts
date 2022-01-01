@@ -3,6 +3,12 @@ export type ScaleNode = { name: string, children: (ScaleStopNode | IgnoredNodeMi
 
 export type ScaleStopNode = { name: string, fills: readonly [SolidPaint], fillStyleId: string }
 
+export interface HSLUV {
+    h: number;
+    s: number;
+    l: number;
+}
+
 export interface ScaleStop {
     name: string;
     offset: number;
@@ -21,8 +27,8 @@ export interface LightnessScaleOptions {
     theme: Scale['theme'];
     min: number;
     max: number;
-    referenceLightest: string;
-    referenceBase: string;
-    referenceDarkest: string;
+    referenceLightest: RGB;
+    referenceBase: RGB;
+    referenceDarkest: RGB;
     stopOffsets: number[];
 }
