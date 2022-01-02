@@ -10,6 +10,14 @@
     {
       "name": "Generate Scale",
       "command": "generateScale"
+    },
+    {
+      "name": "Fix Gradient Lightness",
+      "command": "fixGradientLightness"
+    },
+    {
+      "name": "Fix Gradient Lightness Relative",
+      "command": "fixGradientLightnessRelative"
     }
   ]
 }

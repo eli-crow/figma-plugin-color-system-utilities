@@ -9,6 +9,12 @@ export interface HSLUV {
     l: number;
 }
 
+export interface LCH {
+    l: number;
+    c: number;
+    h: number;
+}
+
 export interface ScaleStop {
     name: string;
     offset: number;
@@ -31,4 +37,8 @@ export interface LightnessScaleOptions {
     referenceBase: RGB;
     referenceDarkest: RGB;
     stopOffsets: number[];
+}
+
+export interface GradientNode extends MinimalFillsMixin {
+    fills: [GradientPaint]
 }
