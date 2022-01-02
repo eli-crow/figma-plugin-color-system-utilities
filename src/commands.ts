@@ -23,6 +23,7 @@ export function fixGradientLightness() {
     const gradientNodes = filterToGradientNodes(selection)
     gradientNodes.forEach(_fixGradientLightness)
 }
+
 export function fixGradientLightnessRelative() {
     const selection = figma.currentPage.selection
     const gradientNodes = filterToGradientNodes(selection)

@@ -1,6 +1,7 @@
 import chroma from 'chroma-js'
 import { hsluvToRgb, lchToRgb, rgbToHsluv, rgbToLch } from 'hsluv'
 import { HSLUV, LCH } from '../types'
+import { clamp01 } from './number'
 
 export function cssColorToRGB(cssColor: string): RGB {
     const [r, g, b] = chroma(cssColor).gl()
@@ -18,11 +19,11 @@ export function rgbToLCH({ r, g, b }: RGB): LCH {
 }
 
 export function lchToRGB({ l, c, h }: LCH): RGB {
-    const [r, g, b] = lchToRgb([l, c, h])
+    const [r, g, b] = lchToRgb([l, c, h]).map(clamp01)
     return { r, g, b }
 }
 
 export function hsluvToRGB({ h, s, l }: HSLUV): RGB {
-    const [r, g, b] = hsluvToRgb([h, s * 100, l * 100])
+    const [r, g, b] = hsluvToRgb([h, s * 100, l * 100]).map(clamp01)
     return { r, g, b }
 }

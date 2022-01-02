@@ -2,6 +2,10 @@ export function clamp(n: number, min: number, max: number) {
     return Math.min(Math.max(n, min), max)
 }
 
+export function clamp01(n) {
+    return clamp(n, 0, 1)
+}
+
 export function lerp(a: number, b: number, t: number) {
     return a + (b - a) * t
 }

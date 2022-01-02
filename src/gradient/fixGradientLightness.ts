@@ -1,4 +1,4 @@
-import { GradientNode, LCH } from "../types";
+import { GradientNode } from "../types";
 import { hsluvToRGB, rgbToHSLUV, rgbToLCH } from "../utilities/color";
 import { equals, remap } from "../utilities/number";
 
@@ -63,10 +63,9 @@ export function fixGradientLightness(gradientNode: GradientNode) {
         if (l > maxLightness) maxLightness = l
     })
 
-    const correctedStops = stopsAsHSLUV.map(stop => {
-        const { l } = stop.color
+    const correctedStops: ColorStop[] = stopsAsHSLUV.map(stop => {
         const color = { ...hsluvToRGB(stop.color), a: 1 }
-        const position = remap(l, minLightness, maxLightness, 0, 1)
+        const position = remap(stop.color.l, minLightness, maxLightness, 0, 1)
         return {
             color,
             position
