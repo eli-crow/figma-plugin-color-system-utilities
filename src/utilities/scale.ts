@@ -1,7 +1,10 @@
+import { createOrUpdateScaleStyles } from "../scale/createOrUpdateScaleStyles"
+import { updateScaleNodes } from "../scale/updateScaleNodes"
 import { Scale, ScaleStop, ScaleNode, ScaleStopNode } from "../types"
 
 const SCALE_NODE_NAME_REGEX = /^\$scale\s*?=\s*?([\S]+?)(?:\s*?\/\s*?([\S]+?)\s*?)?$/
 const SCALE_STOP_NODE_NAME_REGEX = /^[0-9]+$/
+const REFERENCE_GRADIENT_STYLE_NAME = '.reference-gradient'
 
 export function getScaleStyleName(scale: Scale, stopName: string) {
     if (scale.theme) return [scale.theme, scale.name, stopName].join('/')
@@ -51,9 +54,38 @@ export function parseScaleNodeName(scaleNodeName: string) {
     const [, maybeThemeOrName, maybeName] = scaleNodeName.match(new RegExp(SCALE_NODE_NAME_REGEX))
     const theme = maybeName ? maybeThemeOrName : null
     const name = maybeName ?? maybeThemeOrName
+    return { theme, name }
+}
 
-    return {
-        theme,
-        name,
+function isReferenceGradientStyleForScale(styleName: string, scale: Scale) {
+    const expectedName = getReferenceGradientStyleName(scale)
+    return styleName.trim() === expectedName
+}
+
+function getReferenceGradientStyleForScale(scale: Scale) {
+    return figma.getLocalPaintStyles().find(style => isReferenceGradientStyleForScale(style.name, scale))
+}
+
+function getReferenceGradientStyleName(scale: Scale) {
+    const segments = []
+    if (scale.theme) segments.push(scale.theme)
+    segments.push(scale.name)
+    segments.push(REFERENCE_GRADIENT_STYLE_NAME)
+    const name = segments.join('/')
+    return name
+}
+
+function createOrUpdateReferenceGradientStyle(scale: Scale) {
+    const style = getReferenceGradientStyleForScale(scale) ?? figma.createPaintStyle()
+    style.name = getReferenceGradientStyleName(scale)
+    style.paints = [scale.referenceGradient]
+}
+
+export function applyScale(scale: Scale) {
+    createOrUpdateScaleStyles(scale)
+    updateScaleNodes(scale)
+    if (scale.referenceGradient) {
+        createOrUpdateReferenceGradientStyle(scale)
+        //TODO: updateGradientNodes(scale) or something???
     }
 }

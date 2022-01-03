@@ -1,8 +1,18 @@
 import { cssColorToRGB, hsluvToRGB, rgbToHSLUV } from "../utilities/color";
-import { LightnessScaleOptions, Scale, ScaleNode } from "../types";
+import { Scale, ScaleNode } from "../types";
 import { getScaleStopNodes, parseScaleNodeName } from "../utilities/scale";
-import { ceilToPowerOf10, remap } from "../utilities/number";
+import { nextPowerOf10, remap } from "../utilities/number";
 
+export interface LightnessScaleOptions {
+    name: Scale['name'];
+    theme: Scale['theme'];
+    min: number;
+    max: number;
+    referenceLightest: RGB;
+    referenceBase: RGB;
+    referenceDarkest: RGB;
+    stopOffsets: number[];
+}
 function interpretOptions(scaleNode: ScaleNode): LightnessScaleOptions {
     const { name, theme } = parseScaleNodeName(scaleNode.name)
 
@@ -15,7 +25,7 @@ function interpretOptions(scaleNode: ScaleNode): LightnessScaleOptions {
     const stopNumbers = stopNodes.map(node => parseInt(node.name))
     const stopNumbersMax = Math.max(...stopNumbers)
     const min = 0
-    const max = ceilToPowerOf10(stopNumbersMax)
+    const max = nextPowerOf10(stopNumbersMax)
     const stopOffsets = stopNumbers.map(n => n / max)
 
     return {
@@ -50,7 +60,7 @@ function getColor(base: RGB, lightest: RGB, darkest: RGB, l: number) {
     return hsluvToRGB({ h, s, l })
 }
 
-function createScale(options: LightnessScaleOptions): Scale {
+function generateScale(options: LightnessScaleOptions): Scale {
     return {
         type: 'lightness',
         name: options.name,
@@ -75,6 +85,6 @@ function createScale(options: LightnessScaleOptions): Scale {
 
 export function interpretLighnessScaleNode(scaleNode: ScaleNode): Scale {
     const options = interpretOptions(scaleNode)
-    const scale = createScale(options)
+    const scale = generateScale(options)
     return scale
 }

@@ -26,19 +26,10 @@ export interface Scale {
     name: string;
     theme: string | null;
     stops: ScaleStop[];
-}
-
-export interface LightnessScaleOptions {
-    name: Scale['name'];
-    theme: Scale['theme'];
-    min: number;
-    max: number;
-    referenceLightest: RGB;
-    referenceBase: RGB;
-    referenceDarkest: RGB;
-    stopOffsets: number[];
+    referenceGradient?: GradientPaint;
 }
 
 export interface GradientNode extends MinimalFillsMixin {
+    name: string;
     fills: [GradientPaint]
 }

@@ -18,6 +18,10 @@
     {
       "name": "Fix Gradient Lightness Relative",
       "command": "fixGradientLightnessRelative"
+    },
+    {
+      "name": "Create Scale Styles From Gradient",
+      "command": "createScaleStylesFromGradient"
     }
   ]
 }

@@ -17,7 +17,7 @@ export function unlerp(a: number, b: number, n: number) {
 export function remap(n: number, from0: number, from1: number, to0: number, to1: number) {
     return lerp(to0, to1, unlerp(from0, from1, n))
 }
-export function ceilToPowerOf10(n: number) {
+export function nextPowerOf10(n: number) {
     return Math.pow(10, Math.ceil(Math.log10(n)))
 }
 
