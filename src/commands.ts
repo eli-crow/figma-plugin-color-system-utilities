@@ -1,6 +1,4 @@
-import { createOrUpdateScaleStyles } from "./scale/createOrUpdateScaleStyles"
 import { interpretLighnessScaleNode } from "./scale/interpretLightnessScale"
-import { updateScaleNodes } from "./scale/updateScaleNodes"
 import { applyScale, filterToScaleNodes } from "./utilities/scale"
 import { filterToGradientNodes } from "./utilities/gradient"
 import {
@@ -8,6 +6,11 @@ import {
     fixGradientLightnessRelative as _fixGradientLightnessRelative
 } from './gradient/fixGradientLightness'
 import { interpretGradientNode } from "./gradient/interpretGradientNode"
+import { swapScale as _swapScale } from "./swap/swapColor"
+
+export function swapScale() {
+    _swapScale([], 'gray')
+}
 
 export function generateScale() {
     const selection = figma.currentPage.selection

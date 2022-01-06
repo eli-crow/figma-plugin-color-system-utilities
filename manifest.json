@@ -22,6 +22,10 @@
     {
       "name": "Create Scale Styles From Gradient",
       "command": "createScaleStylesFromGradient"
+    },
+    {
+      "name": "Swap Scale",
+      "command": "swapScale"
     }
   ]
 }
