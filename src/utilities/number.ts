@@ -1,26 +1,7 @@
-export function clamp(n: number, min: number, max: number) {
-    return Math.min(Math.max(n, min), max)
-}
-
-export function clamp01(n) {
-    return clamp(n, 0, 1)
-}
-
-export function lerp(a: number, b: number, t: number) {
-    return a + (b - a) * t
-}
-
-export function unlerp(a: number, b: number, n: number) {
-    return (n - a) / (b - a)
-}
-
-export function remap(n: number, from0: number, from1: number, to0: number, to1: number) {
-    return lerp(to0, to1, unlerp(from0, from1, n))
-}
-export function nextPowerOf10(n: number) {
-    return Math.pow(10, Math.ceil(Math.log10(n)))
-}
-
-export function equals(a: number, b: number) {
-    return Math.abs(b - a) < Number.EPSILON
-}
+export const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max)
+export const clamp01 = (n: number) => clamp(n, 0, 1)
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+export const unlerp = (a: number, b: number, n: number) => (n - a) / (b - a)
+export const remap = (n: number, from0: number, from1: number, to0: number, to1: number) => lerp(to0, to1, unlerp(from0, from1, n))
+export const nextPowerOf10 = (n: number) => Math.pow(10, Math.ceil(Math.log10(n)))
+export const equals = (a: number, b: number) => Math.abs(b - a) < Number.EPSILON

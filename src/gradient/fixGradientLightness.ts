@@ -1,3 +1,4 @@
+import { getScale, syncScaleStyles } from "../scale/store";
 import { GradientNode } from "../types";
 import { hsluvToRGB, rgbToHSLUV, rgbToLCH } from "../utilities/color";
 import { equals, remap } from "../utilities/number";
@@ -28,15 +29,19 @@ export function fixGradientLightnessRelative(gradientNode: GradientNode) {
 
     const correctedStops = stopsAsLCH.map((lchStop, i) => {
         const lch = lchStop.color
-        let position: number
-        if (equals(lch.l, maxChromaLCH.l)) position = 0.5
-        else if (lch.l < maxChromaLCH.l) position = remap(lch.l, maxChromaLCH.l, minLuma, 0.5, 0)
-        else position = remap(lch.l, maxChromaLCH.l, maxLuma, 0.5, 1)
+
         const color = { ...gradient.gradientStops[i].color, a: 1 }
-        return {
-            color,
-            position
+
+        let position: number
+        if (equals(lch.l, maxChromaLCH.l)) {
+            position = 0.5
+        } else if (lch.l < maxChromaLCH.l) {
+            position = remap(lch.l, maxChromaLCH.l, minLuma, 0.5, 0)
+        } else {
+            position = remap(lch.l, maxChromaLCH.l, maxLuma, 0.5, 1)
         }
+
+        return { color, position }
     })
 
     const newGradientFill: GradientPaint = {
@@ -44,10 +49,16 @@ export function fixGradientLightnessRelative(gradientNode: GradientNode) {
         gradientStops: correctedStops
     }
 
-    gradientNode.fills = [newGradientFill]
+    if (gradientNode.fillStyleId !== figma.mixed && gradientNode.fillStyleId !== '') {
+        const style = figma.getStyleById(gradientNode.fillStyleId) as PaintStyle
+        style.paints = [newGradientFill]
+        syncScaleStyles(getScale(style))
+    } else {
+        gradientNode.fills = [newGradientFill]
+    }
 }
 
-export function fixGradientLightness(gradientNode: GradientNode) {
+export function fixGradientLightnessAbsolute(gradientNode: GradientNode) {
     const gradient = gradientNode.fills[0]
 
     const stopsAsHSLUV = gradient.gradientStops.map(stop => {
@@ -77,5 +88,11 @@ export function fixGradientLightness(gradientNode: GradientNode) {
         gradientStops: correctedStops
     }
 
-    gradientNode.fills = [newGradientFill]
+    if (gradientNode.fillStyleId !== figma.mixed && gradientNode.fillStyleId !== '') {
+        const style = figma.getStyleById(gradientNode.fillStyleId) as PaintStyle
+        style.paints = [newGradientFill]
+        syncScaleStyles(getScale(style))
+    } else {
+        gradientNode.fills = [newGradientFill]
+    }
 }

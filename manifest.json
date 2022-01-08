@@ -8,24 +8,39 @@
   ],
   "menu": [
     {
-      "name": "Generate Scale",
-      "command": "generateScale"
-    },
-    {
       "name": "Fix Gradient Lightness",
-      "command": "fixGradientLightness"
+      "command": "fixGradientLightness",
+      "parameters": [
+        {
+          "name": "Mode",
+          "key": "fixGradientLightness.mode"
+        }
+      ]
     },
     {
-      "name": "Fix Gradient Lightness Relative",
-      "command": "fixGradientLightnessRelative"
+      "name": "Create Scale",
+      "command": "createScale",
+      "parameters": [
+        {
+          "name": "Scale Name",
+          "key": "createScale.name",
+          "allowFreeform": true
+        }
+      ]
     },
     {
-      "name": "Create Scale Styles From Gradient",
-      "command": "createScaleStylesFromGradient"
+      "name": "Change Scale",
+      "command": "changeScale",
+      "parameters": [
+        {
+          "name": "Scale / Folder",
+          "key": "changeScale.pivot"
+        }
+      ]
     },
     {
-      "name": "Swap Scale",
-      "command": "swapScale"
+      "name": "Update Scale Styles",
+      "command": "updateScaleStyles"
     }
   ]
 }

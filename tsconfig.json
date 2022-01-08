@@ -11,7 +11,7 @@
     "outDir": "dist/",
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
   },
   "watchOptions": {
     "watchFile": "useFsEvents",

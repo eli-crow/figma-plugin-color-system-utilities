@@ -1,13 +1,29 @@
-import * as commands from './commands'
+import commands from './commands'
 
-figma.on('run', async (e: RunEvent) => {
+function unwrapParameters(parameters: ParameterValues): ParameterValues {
+    if (!parameters) return {}
+    return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key.split('.')[1], value]))
+}
+
+figma.parameters.on('input', (event: ParameterInputEvent) => {
     try {
-        const commandToRun = commands[e.command]
-        await commandToRun(e.parameters)
-    } catch (e) {
-        console.error(e)
+        const [commandKey, parameterKey] = event.key.split('.')
+        const command = commands[commandKey]
+        const suggestions = command[parameterKey](event.query, event.parameters)
+        event.result.setSuggestions(suggestions)
+    } catch (error) {
+        console.error(error)
     }
-    finally {
+})
+
+figma.on('run', async (event: RunEvent) => {
+    try {
+        const command = commands[event.command]
+        const parameters = unwrapParameters(event.parameters)
+        await command.execute(parameters)
+    } catch (error) {
+        console.error(error)
+    } finally {
         figma.closePlugin()
     }
 })

@@ -1,39 +1,96 @@
-import { interpretLighnessScaleNode } from "./scale/interpretLightnessScale"
-import { applyScale, filterToScaleNodes } from "./utilities/scale"
 import { filterToGradientNodes } from "./utilities/gradient"
 import {
-    fixGradientLightness as _fixGradientLightness,
+    fixGradientLightnessAbsolute as _fixGradientLightness,
     fixGradientLightnessRelative as _fixGradientLightnessRelative
 } from './gradient/fixGradientLightness'
-import { interpretGradientNode } from "./gradient/interpretGradientNode"
-import { swapScale as _swapScale } from "./swap/swapColor"
+import { changeScale as _changeScale } from "./scale/change"
+import { createScale as _createScale, syncAllScaleStyles } from "./scale/store"
+import { FOLDER_SEPARATOR_REGEX, Suggestion } from "./types"
+import { interpretGradientNode } from "./scale/interpret"
 
-export function swapScale() {
-    _swapScale([], 'gray')
+function fuzzyMatch(a: string, b: string) {
+    // todo find a simple fuzzy match
+    return a.toLowerCase().includes(b.toLowerCase())
 }
 
-export function generateScale() {
-    const selection = figma.currentPage.selection
-    const scaleNodes = filterToScaleNodes(selection)
-    const scales = scaleNodes.map(interpretLighnessScaleNode)
-    scales.forEach(applyScale)
+// confusing, but basically requires correctly typed suggestion functions for each parameter
+type Command<
+    Params extends ParameterValues = {},
+    Key extends string = Extract<keyof Params, string>>
+    = Record<Key, (query: string, parameters: Partial<Params>) => Suggestion<Params[Key]>[]>
+    & { execute(parameters: Params): void | Promise<void> }
+
+const changeScale: Command<{ pivot: string }> = {
+    execute({ pivot }) {
+        const selection = figma.currentPage.selection
+        selection.forEach(node => _changeScale(node, pivot))
+    },
+    pivot(query: string) {
+        const segments = figma.getLocalPaintStyles()
+            .flatMap(scale => scale.name.split(RegExp(FOLDER_SEPARATOR_REGEX)))
+
+        const unique = [...new Set(segments)]
+
+        return unique
+            .filter(pivot => !query || fuzzyMatch(pivot, query))
+            .map(pivot => {
+                return { name: pivot, data: pivot }
+            })
+    }
 }
 
-export function createScaleStylesFromGradient() {
-    const selection = figma.currentPage.selection
-    const gradientNodes = filterToGradientNodes(selection)
-    const scales = gradientNodes.map(interpretGradientNode)
-    scales.forEach(applyScale)
+const createScale: Command<{ name: string }> = {
+    execute({ name }) {
+        const selection = figma.currentPage.selection
+        const gradientNodes = filterToGradientNodes(selection)
+        gradientNodes.forEach(node => {
+            const scale = interpretGradientNode(node)
+            if (name) scale.name = name
+            const scaleStyle = _createScale(scale)
+            node.fillStyleId = scaleStyle.id
+        })
+    },
+    name(query: string) {
+        const names = figma.currentPage.selection.map(node => node.name)
+        return query ? [] : names.map(s => {
+            return { name: s, data: s }
+        })
+    }
 }
 
-export function fixGradientLightness() {
-    const selection = figma.currentPage.selection
-    const gradientNodes = filterToGradientNodes(selection)
-    gradientNodes.forEach(_fixGradientLightness)
+enum GradientLightnessMode {
+    Absolute = 'absolute',
+    Relative = 'relative',
+}
+const fixGradientLightness: Command<{ mode: GradientLightnessMode }> = {
+    execute({ mode }) {
+        const selection = figma.currentPage.selection
+        const gradientNodes = filterToGradientNodes(selection)
+        if (mode === GradientLightnessMode.Relative) {
+            gradientNodes.forEach(_fixGradientLightnessRelative)
+        } else {
+            gradientNodes.forEach(_fixGradientLightness)
+        }
+    },
+    mode(query: string) {
+        return Object.entries(GradientLightnessMode)
+            .filter(([key]) => fuzzyMatch(key, query))
+            .map(([key, value]) => ({
+                name: key,
+                data: value,
+            }))
+    }
 }
 
-export function fixGradientLightnessRelative() {
-    const selection = figma.currentPage.selection
-    const gradientNodes = filterToGradientNodes(selection)
-    gradientNodes.forEach(_fixGradientLightnessRelative)
+const updateScaleStyles: Command = {
+    execute() {
+        syncAllScaleStyles()
+    }
 }
+
+export default {
+    changeScale,
+    createScale,
+    fixGradientLightness,
+    updateScaleStyles
+} as { [key: string]: Command }
