@@ -72,3 +72,9 @@ export interface GradientNode extends MinimalFillsMixin {
     name: string;
     fills: [GradientPaint]
 }
+
+export enum ColorProperty {
+    Lightness = 'lightness',
+    Saturation = 'saturation',
+    Hue = 'hue',
+}

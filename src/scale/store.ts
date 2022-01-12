@@ -33,7 +33,6 @@ export function getScale(gradientStyle: PaintStyle): Scale {
 }
 
 export function syncScaleStyles(scale: Scale) {
-    // TODO: remove any styles in this folder that aren't implied by the scale
     scale.options.stops.forEach(stop => {
         const rgb = sampleGradient(scale.gradient, stop.position)
         const stopName = stop.name ?? stop.position.toString()

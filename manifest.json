@@ -8,12 +8,16 @@
   ],
   "menu": [
     {
-      "name": "Fix Gradient Lightness",
-      "command": "fixGradientLightness",
+      "name": "Fix",
+      "command": "fix",
       "parameters": [
         {
+          "name": "Property",
+          "key": "fix.property"
+        },
+        {
           "name": "Mode",
-          "key": "fixGradientLightness.mode"
+          "key": "fix.mode"
         }
       ]
     },

@@ -22,6 +22,7 @@ figma.on('run', async (event: RunEvent) => {
         const parameters = unwrapParameters(event.parameters)
         await command.execute(parameters)
     } catch (error) {
+        figma.notify(error.message, { error: true, timeout: 3_000 })
         console.error(error)
     } finally {
         figma.closePlugin()

@@ -5,7 +5,7 @@ import {
 } from './gradient/fixGradientLightness'
 import { changeScale as _changeScale } from "./scale/change"
 import { createScale as _createScale, syncAllScaleStyles } from "./scale/store"
-import { FOLDER_SEPARATOR_REGEX, Suggestion } from "./types"
+import { ColorProperty, FOLDER_SEPARATOR_REGEX, Suggestion } from "./types"
 import { interpretGradientNode } from "./scale/interpret"
 
 function fuzzyMatch(a: string, b: string) {
@@ -17,7 +17,8 @@ function fuzzyMatch(a: string, b: string) {
 type Command<
     Params extends ParameterValues = {},
     Key extends string = Extract<keyof Params, string>>
-    = Record<Key, (query: string, parameters: Partial<Params>) => Suggestion<Params[Key]>[]>
+    =
+    Record<Key, (query: string, parameters: Partial<Params>) => Suggestion<Params[Key]>[]>
     & { execute(parameters: Params): void | Promise<void> }
 
 const changeScale: Command<{ pivot: string }> = {
@@ -62,15 +63,28 @@ enum GradientLightnessMode {
     Absolute = 'absolute',
     Relative = 'relative',
 }
-const fixGradientLightness: Command<{ mode: GradientLightnessMode }> = {
-    execute({ mode }) {
+
+const fix: Command<{ property: ColorProperty, mode: GradientLightnessMode }> = {
+    execute({ mode, property }) {
         const selection = figma.currentPage.selection
         const gradientNodes = filterToGradientNodes(selection)
-        if (mode === GradientLightnessMode.Relative) {
-            gradientNodes.forEach(_fixGradientLightnessRelative)
+        if (property === ColorProperty.Lightness) {
+            if (mode === GradientLightnessMode.Relative) {
+                gradientNodes.forEach(_fixGradientLightnessRelative)
+            } else {
+                gradientNodes.forEach(_fixGradientLightness)
+            }
         } else {
-            gradientNodes.forEach(_fixGradientLightness)
+            throw new Error(`${property} not supported yet!`)
         }
+    },
+    property(query: string) {
+        return Object.entries(ColorProperty)
+            .filter(([key]) => fuzzyMatch(key, query))
+            .map(([key, value]) => ({
+                name: key,
+                data: value
+            }))
     },
     mode(query: string) {
         return Object.entries(GradientLightnessMode)
@@ -79,7 +93,7 @@ const fixGradientLightness: Command<{ mode: GradientLightnessMode }> = {
                 name: key,
                 data: value,
             }))
-    }
+    },
 }
 
 const updateScaleStyles: Command = {
@@ -91,6 +105,6 @@ const updateScaleStyles: Command = {
 export default {
     changeScale,
     createScale,
-    fixGradientLightness,
+    fix,
     updateScaleStyles
 } as { [key: string]: Command }
